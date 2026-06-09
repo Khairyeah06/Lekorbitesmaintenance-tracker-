@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lekor Bites Warehouse Maintenance Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .status-badge { transition: all 0.3s ease; cursor: pointer; }
+        .status-badge:active { transform: scale(0.95); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .img-placeholder {
+            background-image: repeating-linear-gradient(45deg, #f3f4f6 25%, transparent 25%, transparent 75%, #f3f4f6 75%, #f3f4f6), repeating-linear-gradient(45deg, #f3f4f6 25%, #ffffff 25%, #ffffff 75%, #f3f4f6 75%, #f3f4f6);
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a', 900: '#14532d', }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="text-gray-800 antialiased min-h-screen pb-12">
+
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-lg md:text-xl font-bold text-gray-900 flex items-start sm:items-center gap-2">
+                    <i class="ph-fill ph-wrench text-brand-600 text-2xl mt-0.5 sm:mt-0"></i>
+                    <span class="leading-tight">Lekor Bites Warehouse<br class="block sm:hidden"/> Maintenance Tracker</span>
+                </h1>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mt-2">
+                    <span class="inline-flex items-center w-fit gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-brand-50 text-brand-700 border border-brand-200 shadow-sm">
+                        <i class="ph-fill ph-user-circle text-sm"></i> PIC: Khair
+                    </span>
+                    <p class="text-xs sm:text-sm text-gray-500">Tap status badges to update progress</p>
+                </div>
+            </div>
+            <div>
+                <button onclick="shareToWhatsApp()" class="bg-brand-600 hover:bg-brand-700 text-white p-2.5 rounded-full shadow-md transition flex items-center justify-center w-11 h-11 ml-2" title="Share via WhatsApp">
+                    <i class="ph ph-whatsapp-logo text-2xl"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        
+        <div class="mb-6 flex gap-2 overflow-x-auto pb-2 scrollbar-hide" id="filter-container">
+            <button class="px-4 py-1.5 rounded-full text-sm font-medium bg-gray-800 text-white whitespace-nowrap" onclick="filterItems('All')">All</button>
+            <button class="px-4 py-1.5 rounded-full text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 whitespace-nowrap" onclick="filterItems('Pending')">Pending</button>
+            <button class="px-4 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 whitespace-nowrap" onclick="filterItems('In Progress')">In Progress</button>
+            <button class="px-4 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 whitespace-nowrap" onclick="filterItems('Completed')">Completed</button>
+        </div>
+
+        <div id="maintenance-list" class="space-y-6">
+            </div>
+        
+    </main>
+
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+        Status Updated!
+    </div>
+
+    <script>
+        // 1. DATA UTAMA DIANGKAT KE ATAS (SISTEM TAKKAN KOSONG)
+        const initialData = [
+            { id: 1, machine: "Code Machine", issue: "Machine never had oil/grease before. Movement is rough.", solution: "Need to buy oil and grease to make the movement run smoother.", status: "Pending", photo: null, notes: "" },
+            { id: 2, machine: "FRY MACHINE", issue: "Missing equipment. Old parts were taken and used for the current frying machine (2024-2025).", solution: "Machine is okay, just need to buy more equipment/replacement parts.", status: "Pending", photo: null, notes: "" },
+            { id: 3, machine: "Cutting Machine", issue: "Temporary fixes failing. Lekor shape sometimes doesn't come out properly. Risk of slowing down high-volume production.", solution: "Call proper technician to fix it permanently. Need to customize parts for lekor sticks and holder/barrier.", status: "Pending", photo: null, notes: "" },
+            { id: 4, machine: "Chest Freezer", issue: "Compressor is faulty/broken.", solution: "Need to change the compressor to a new unit.", status: "Pending", photo: null, notes: "" },
+            { id: 5, machine: "Air Compressor", issue: "Missing Valve body (gone a long time ago). Can still use but not safe.", solution: "Need to buy and install Valve body (estimated RM20).", status: "Pending", photo: null, notes: "" },
+            { id: 6, machine: "Facility: Drain", issue: "Exposed holes in the drainage area.", solution: "Need another 5-6kg cement to close all holes properly.", status: "Pending", photo: null, notes: "" },
+            { id: 7, machine: "Tool: Drill", issue: "Need a drill to install the curtain strip. Pending availability.", solution: "Ms. Juliet mentioned that she will bring her own drill when she comes to the warehouse.", status: "Pending", photo: null, notes: "" }
+        ];
+
+        // Set terus data asal supaya app tak loading kosong
+        let maintenanceData = [...initialData];
+        let currentFilter = 'All';
+
+        // 2. CONFIG DI LETAK DI BAWAH DATA
+        const firebaseConfig = {
+            apiKey: "AIzaSyCSvwarS7cWSQD4tqUes-C80g7HaoTzlgM",
+            authDomain: "maintenance-tracker-2bbbe.firebaseapp.com",
+            projectId: "maintenance-tracker-2bbbe",
+            storageBucket: "maintenance-tracker-2bbbe.firebasestorage.app",
+            messagingSenderId: "333034424822",
+            appId: "1:333034424822:web:959bed60ff1553734ddfd7",
+            
+            // AMBIL URL BARU: Sekarang kau dah create database, copy link URL kat atas screen Firebase Realtime Database tu dan paste ganti kat bawah ni.
+            databaseURL: "https://maintenance-tracker-2bbbe-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        function init() {
+            // Render data asal dulu siap-siap ke skrin tanpa tunggu Firebase
+            renderCards();
+
+            // Lepas tu baru Firebase cuba sambung & ambil data terkini (jika ada)
+            database.ref('maintenanceData').once('value')
+            .then((snapshot) => {
+                if (snapshot.exists()) {
+                    maintenanceData = snapshot.val();
+                    let updated = false;
+                    maintenanceData.forEach(item => {
+                        if (item.notes === undefined) {
+                            item.notes = "";
+                            updated = true;
+                        }
+                    });
+                    if (updated) saveData();
+                    renderCards(); // Refresh skrin dengan data dari Firebase
+                } else {
+                    // Kalau database kat Firebase tu kosong lagi, kita hantar data asal ni masuk sana
+                    saveData();
+                }
+            })
+            .catch((error) => {
+                console.error("Firebase sync bypass:", error);
+                showToast("Menggunakan data lokal offline.");
+            });
+        }
+
+        function saveData() {
+            database.ref('maintenanceData').set(maintenanceData)
+            .catch((error) => {
+                console.error("Firebase save error:", error);
+                showToast("Gagal simpan ke cloud (Semak databaseURL)");
+            });
+        }
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'Pending': return 'bg-red-100 text-red-700 border-red-200';
+                case 'In Progress': return 'bg-blue-100 text-blue-700 border-blue-200';
+                case 'Completed': return 'bg-green-100 text-green-700 border-green-200';
+                default: return 'bg-gray-100 text-gray-700 border-gray-200';
+            }
+        }
+
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'Pending': return '<i class="ph ph-warning-circle text-lg mr-1"></i>';
+                case 'In Progress': return '<i class="ph ph-spinner-gap animate-spin text-lg mr-1"></i>';
+                case 'Completed': return '<i class="ph ph-check-circle text-lg mr-1"></i>';
+                default: return '';
+            }
+        }
+
+        function toggleStatus(id) {
+            const itemIndex = maintenanceData.findIndex(item => item.id === id);
+            if (itemIndex > -1) {
+                const currentStatus = maintenanceData[itemIndex].status;
+                let newStatus = '';
+                
+                if (currentStatus === 'Pending') newStatus = 'In Progress';
+                else if (currentStatus === 'In Progress') newStatus = 'Completed';
+                else newStatus = 'Pending';
+
+                maintenanceData[itemIndex].status = newStatus;
+                saveData(); 
+                renderCards();
+                showToast(`Status updated to ${newStatus}`);
+            }
+        }
+
+        function filterItems(status) {
+            currentFilter = status;
+            const buttons = document.querySelectorAll('#filter-container button');
+            buttons.forEach(btn => {
+                if (btn.innerText === status) {
+                    btn.className = 'px-4 py-1.5 rounded-full text-sm font-medium bg-gray-800 text-white whitespace-nowrap';
+                } else {
+                    btn.className = 'px-4 py-1.5 rounded-full text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 whitespace-nowrap';
+                }
+            });
+            renderCards();
+        }
+
+        function handleImageUpload(event, id) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 600;
+                    const MAX_HEIGHT = 600;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    const itemIndex = maintenanceData.findIndex(item => item.id === id);
+                    if (itemIndex > -1) {
+                        maintenanceData[itemIndex].photo = dataUrl;
+                        saveData(); 
+                        renderCards();
+                        showToast('Photo uploaded and locked!');
+                    }
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function updateNotes(id, value) {
+            const itemIndex = maintenanceData.findIndex(item => item.id === id);
+            if (itemIndex > -1) {
+                maintenanceData[itemIndex].notes = value;
+                saveData();
+                showToast('Notes saved successfully!');
+            }
+        }
+
+        function renderCards() {
+            const listContainer = document.getElementById('maintenance-list');
+            listContainer.innerHTML = '';
+
+            const filteredData = currentFilter === 'All' 
+                ? maintenanceData 
+                : maintenanceData.filter(item => item.status === currentFilter);
+
+            if(filteredData.length === 0) {
+                 listContainer.innerHTML = `
+                    <div class="text-center py-10 bg-white rounded-xl shadow-sm border border-gray-100">
+                        <i class="ph ph-clipboard-text text-4xl text-gray-300 mb-2"></i>
+                        <p class="text-gray-500">No items found for this filter.</p>
+                    </div>`;
+                 return;
+            }
+
+            filteredData.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row transition hover:shadow-md';
+                
+                let photoSection = '';
+                if (item.photo) {
+                    photoSection = `
+                    <div class="w-full md:w-48 h-48 md:h-auto bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-100 overflow-hidden relative">
+                        <img src="${item.photo}" class="w-full h-full object-cover" alt="${item.machine}">
+                        <div class="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full" title="Photo Locked">
+                            <i class="ph ph-lock-key text-xs"></i>
+                        </div>
+                    </div>`;
+                } else {
+                    photoSection = `
+                    <div class="w-full md:w-48 h-48 md:h-auto img-placeholder flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-100 relative group cursor-pointer hover:bg-gray-50 transition" onclick="document.getElementById('file-upload-${item.id}').click()">
+                        <input type="file" id="file-upload-${item.id}" class="hidden" accept="image/*" onchange="handleImageUpload(event, ${item.id})">
+                        <i class="ph ph-camera-plus text-3xl text-gray-400 group-hover:text-brand-600 transition"></i>
+                        <span class="text-xs text-gray-500 mt-2 font-medium group-hover:text-brand-600">Tap to Add Photo</span>
+                        <span class="text-[10px] text-gray-400 mt-1">(Cannot be changed later)</span>
+                    </div>`;
+                }
+
+                card.innerHTML = `
+                    ${photoSection}
+                    <div class="p-5 flex-1 flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-3">
+                                <h2 class="text-lg font-bold text-gray-800">${item.machine}</h2>
+                                <button onclick="toggleStatus(${item.id})" class="status-badge px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border flex items-center ${getStatusColor(item.status)}">
+                                    ${getStatusIcon(item.status)}
+                                    ${item.status}
+                                </button>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"><i class="ph ph-warning-octagon text-red-500"></i> Issue</h3>
+                                <p class="text-sm text-gray-700 bg-red-50 p-3 rounded-lg border border-red-50/50">${item.issue}</p>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"><i class="ph ph-lightbulb text-green-500"></i> Solution</h3>
+                                <p class="text-sm text-gray-700 bg-green-50 p-3 rounded-lg border border-green-50/50">${item.solution}</p>
+                            </div>
+
+                            <div class="pt-3 border-t border-gray-100">
+                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                    <i class="ph ph-note-pencil text-amber-500"></i> Notes / Alternative Resolution
+                                </h3>
+                                <textarea 
+                                    onchange="updateNotes(${item.id}, this.value)"
+                                    placeholder="Add any notes here (e.g., if settled using a different method)..."
+                                    class="w-full text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-200 focus:bg-white focus:ring-1 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-y min-h-[60px]"
+                                >${item.notes || ''}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => { toast.classList.add('opacity-0'); }, 2000);
+        }
+
+        function shareToWhatsApp() {
+            let text = "*LEKOR BITES WAREHOUSE MAINTENANCE*\n";
+            text += "👨‍🔧 *PIC: Khair*\n\n";
+            
+            maintenanceData.forEach((item, index) => {
+                const statusEmoji = item.status === 'Completed' ? '✅' : (item.status === 'In Progress' ? '🔄' : '⏳');
+                text += `*${index + 1}. ${item.machine}*\n`;
+                text += `Status: ${statusEmoji} ${item.status}\n`;
+                if (item.notes && item.notes.trim() !== "") {
+                    text += `Notes: _${item.notes.trim()}_\n`;
+                }
+                text += `\n`;
+            });
+            
+            text += "_Generated from Lekor Bites Tracker_";
+            const encodedText = encodeURIComponent(text);
+            window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+        }
+
+        // Initialize App
+        window.onload = init;
+    </script>
+</body>
+</html>
